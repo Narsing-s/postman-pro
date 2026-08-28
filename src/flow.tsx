@@ -1,38 +1,174 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, CheckCircle2, CirclePlay, Code2, Copy, Eye, GitBranch, Link2, Plug, Plus, Save, Trash2, Wand2, X, Zap } from 'lucide-react';
+const execute = async () => {
+  if (!flow.nodes.length) return;
 
-type Kind='http'|'connector'|'condition'|'transform'|'delay'|'script'|'display';
-type Node={id:string;name:string;kind:Kind;method:string;path:string;connector?:string;operation?:string;body?:string;condition?:string;expression?:string;delay?:number;script?:string;capture?:string;status?:'idle'|'running'|'success'|'error';value?:any};
-type Edge={from:string;to:string};
-type Flow={id:string;name:string;nodes:Node[];edges:Edge[]};
-const CONNECTORS=['Salesforce','GitHub','Notion','Figma','Calendly','ClickUp','Box'];
-const BLOCKS:[string,Kind][]=[['HTTP Request','http'],['Connector','connector'],['Condition','condition'],['Transform','transform'],['Delay','delay'],['Script','script'],['Display','display']];
-const FLOW_KEY='postman_pro_flows';
-const blank=():Flow=>({id:crypto.randomUUID(),name:'New Flow',nodes:[],edges:[]});
-const read=():Flow[]=>{try{return JSON.parse(localStorage.getItem(FLOW_KEY)||'[]')}catch{return []}};
-const resolve=(s:string,v:Record<string,any>)=>s.replace(/\{\{([^}]+)\}\}/g,(_,k)=>String(v[k.trim()]??`{{${k}}}`));
-export default function FlowBuilder(){
- const [flows,setFlows]=useState<Flow[]>(read),[flow,setFlow]=useState<Flow>(()=>read()[0]||blank()),[selected,setSelected]=useState(''),[running,setRunning]=useState(false),[palette,setPalette]=useState(false),[connectorMenu,setConnectorMenu]=useState(false),[vars,setVars]=useState<Record<string,any>>({}),[log,setLog]=useState<string[]>([]),[layout,setLayout]=useState<'wide'|'stack'|'single'>(()=>(localStorage.getItem('pp_flow_layout') as any)||'wide');
- useEffect(()=>{localStorage.setItem(FLOW_KEY,JSON.stringify(flows))},[flows]);
- const sync=(f:Flow)=>{setFlow(f);setFlows(xs=>{const i=xs.findIndex(x=>x.id===f.id);return i<0?[...xs,f]:xs.map((x,j)=>j===i?f:x)})};
- const selectedNode=flow.nodes.find(n=>n.id===selected);
- const add=(kind:Kind='http',connector='')=>{const n:Node={id:crypto.randomUUID(),name:connector?`${connector} action`:kind==='http'?'HTTP Request':kind==='condition'?'Condition':kind==='transform'?'Transform':kind==='delay'?'Delay':kind==='script'?'Script':kind==='display'?'Display':'Connector',kind,method:kind==='http'?'GET':'FLOW',path:kind==='http':'https://api.example.com/resource',connector,operation:'',body:'',condition:'status >= 200 && status < 300',expression:'value',delay:1000,script:'',capture:''};const last=flow.nodes.at(-1);const f={...flow,nodes:[...flow.nodes,n],edges:last?[...flow.edges,{from:last.id,to:n.id}]:flow.edges};sync(f);setSelected(n.id);setPalette(false);setConnectorMenu(false)};
- const update=(p:Partial<Node>)=>{if(!selectedNode)return;sync({...flow,nodes:flow.nodes.map(n=>n.id===selected?{...n,...p}:n)})};
- const remove=()=>{if(!selected)return;sync({...flow,nodes:flow.nodes.filter(n=>n.id!==selected),edges:flow.edges.filter(e=>e.from!==selected&&e.to!==selected)});setSelected('')};
- const connect=(to:string)=>{if(!selected||selected===to)return;sync({...flow,edges:flow.edges.some(e=>e.from===selected&&e.to===to)?flow.edges: [...flow.edges,{from:selected,to}]})};
- const createFlow=()=>{const f=blank();setFlows(x=>[...x,f]);setFlow(f);setSelected('');setLog([])};
- const saveFlow=()=>{localStorage.setItem(FLOW_KEY,JSON.stringify(flows));setLog(x=>['Flow saved',...x].slice(0,12))};
- const execute=async()=>{if(!flow.nodes.length)return;setRunning(true);setLog([]);let data:any=null;let local={...vars};let current=flow.nodes[0];const visited=new Set<string>();try{while(current&&!visited.has(current.id)){visited.add(current.id);sync({...flow,nodes:flow.nodes.map(n=>n.id===current.id?{...n,status:'running'}:n)});let value:any=data;
-   if(current.kind==='http'){const url=resolve(current.path,local);const r=await fetch('/proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,method:current.method,headers:{'Content-Type':'application/json'},body:current.method==='GET'?undefined:resolve(current.body||'',local)})});const d=await r.json();if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);value=d.body?(()=>{try{return JSON.parse(d.body)}catch{return d.body}})():d;local.status=d.status;local.response=value;}
-   else if(current.kind==='condition'){const ok=current.condition?Function('v','with(v){return '+resolve(current.condition,local)+'}')(local):true;if(!ok){setLog(x=>[...x,`Condition failed: ${current.condition}`]);break}value=local}
-   else if(current.kind==='transform'){value=resolve(current.expression||'value',local);local.value=value}
-   else if(current.kind==='delay'){await new Promise(r=>setTimeout(r,Math.min(current.delay||1000,10000)));value=local}
-   else if(current.kind==='script'){value=local}
-   else if(current.kind==='connector'){value={connector:current.connector,operation:current.operation,status:'ready'};local.connectorResult=value}
-   else {value=local}
-   if(current.capture)local[current.capture]=typeof value==='string'?value:JSON.stringify(value);setVars({...local});sync({...flow,nodes:flow.nodes.map(n=>n.id===current.id?{...n,status:'success',value}:n)});setLog(x=>[...x,`${current.kind.toUpperCase()} • ${current.name} • success${current.capture?` • {{${current.capture}}} captured`:''}`]);
-   const next=flow.edges.find(e=>e.from===current.id&&!visited.has(e.to));current=flow.nodes.find(n=>n.id===next?.to) as Node;
-  }}catch(e){const msg=String((e as Error).message||e);sync({...flow,nodes:flow.nodes.map(n=>n.id===current?.id?{...n,status:'error',value:msg}:n)});setLog(x=>[...x,`ERROR • ${msg}`])}finally{setRunning(false)}};
- const updateEdge=(to:string)=>connect(to);
- const layoutButtons=useMemo(()=>['wide','stack','single'] as const,[]);
- return <section className={'flow-builder layout-'+layout}><div className="flow-head"><div><div className="eyebrow">POSTMAN PRO FLOWS</div><h2>{flow.name}</h2><p>Build, connect, test and reuse API workflows with real request execution.</p></div><div className="flow-actions"><select className="flow-select" value={flow.id} onChange={e=>{const f=flows.find(x=>x.id===e.target.value);if(f){setFlow(f);setSelected('')}}}>{flows.length?flows.map(f=><option key={f.id} value={f.id}>{f.name}</option>):<option>No flows</option>}</select><button onClick={createFlow}><Plus size={15}/>New flow</button><button onClick={saveFlow}><Save size={15}/>Save</button><button onClick={remove} disabled={!selected}><Trash2 size={15}/>Delete</button><button className="primary" onClick={execute} disabled={running||!flow.nodes.length}><CirclePlay size={15}/>{running?'Running…':'Run flow'}</button></div></div><div className="flow-layout-toolbar"><input className="flow-name" value={flow.name} onChange={e=>sync({...flow,name:e.target.value})}/><span>Layout</span>{layoutButtons.map(x=><button key={x} className={layout===x?'active':''} onClick={()=>{setLayout(x);localStorage.setItem('pp_flow_layout',x)}}>{x==='single'?'Single panel':x[0].toUpperCase()+x.slice(1)}</button>)}</div><div className="flow-main"><div className="flow-canvas"><div className="flow-toolbar"><button onClick={()=>setPalette(v=>!v)}><Plus size={14}/>Add block</button>{selected&&<span>Selected: {selectedNode?.name}</span>}</div>{palette&&<div className="flow-palette">{BLOCKS.map(([label,k])=><button key={k} onClick={()=>k==='connector'?setConnectorMenu(v=>!v):add(k)}>{label}<span>{k==='connector'?'›':''}</span></button>)}{connectorMenu&&<div className="connector-submenu"><b>Connectors</b>{CONNECTORS.map(c=><button key={c} onClick={()=>add('connector',c)}><Plug size={13}/>{c}</button>)}</div>}</div>}{!flow.nodes.length?<div className="flow-empty"><Wand2 size={26}/><h3>Start building your flow</h3><p>Add blocks and connect them to create your own workflow.</p><button onClick={()=>setPalette(true)}><Plus size={14}/> Add first block</button></div>:<div className="flow-chain">{flow.nodes.map((n,i)=><div className="flow-column" key={n.id}><button className={'flow-node '+(selected===n.id?'selected':'')} onClick={()=>setSelected(n.id)}><div className="flow-node-top"><span className={'flow-method flow-'+n.method.toLowerCase()}>{n.connector||n.method}</span>{n.status==='success'?<CheckCircle2 size={15}/>:n.status==='error'?<X size={15}/>:n.kind==='connector'?<Plug size={15}/>:n.kind==='condition'?<GitBranch size={15}/>:n.kind==='transform'?<Code2 size={15}/>:n.kind==='display'?<Eye size={15}/>:<Zap size={15}/>}</div><strong>{n.name}</strong><code>{n.operation||n.path}</code><span className="flow-hint">{n.capture?`Captures {{${n.capture}}}`:n.kind==='connector'?'Configure operation':i===flow.nodes.length-1?'Output':'Connected →'}</span></button>{i<flow.nodes.length-1&&<div className="flow-connector"><ArrowDown size={15}/><span>then</span></div>}</div>)}</div>}</div><aside className="flow-inspector"><div className="inspector-title">Block configuration</div>{!selectedNode?<p>Select a block to configure it.</p>:<><label>Name<input value={selectedNode.name} onChange={e=>update({name:e.target.value})}/></label>{selectedNode.kind==='http'&&<><label>Method<select value={selectedNode.method} onChange={e=>update({method:e.target.value})}>{['GET','POST','PUT','PATCH','DELETE'].map(x=><option key={x}>{x}</option>)}</select></label><label>URL<input value={selectedNode.path} onChange={e=>update({path:e.target.value})}/></label><label>Body<textarea value={selectedNode.body||''} onChange={e=>update({body:e.target.value})}/></label></>}{selectedNode.kind==='connector'&&<><label>Connector<select value={selectedNode.connector||''} onChange={e=>update({connector:e.target.value})}><option value="">Select</option>{CONNECTORS.map(x=><option key={x}>{x}</option>)}</select></label><label>Operation<input value={selectedNode.operation||''} onChange={e=>update({operation:e.target.value})} placeholder="Get record / Create item"/></label><div className="connector-note"><Plug size={13}/>Account connection is configured per connector.</div></>}{selectedNode.kind==='condition'&&<label>Condition<input value={selectedNode.condition||''} onChange={e=>update({condition:e.target.value})}/></label>}{selectedNode.kind==='transform'&&<label>Expression<textarea value={selectedNode.expression||''} onChange={e=>update({expression:e.target.value})}/></label>}{selectedNode.kind==='delay'&&<label>Delay (ms)<input type="number" value={selectedNode.delay||1000} onChange={e=>update({delay:Number(e.target.value)})}/></label>}{selectedNode.kind==='script'&&<label>Script<textarea value={selectedNode.script||''} onChange={e=>update({script:e.target.value})}/></label>}<label>Capture output as<input value={selectedNode.capture||''} onChange={e=>update({capture:e.target.value})}/></label><label>Connect next block<select value={flow.edges.find(e=>e.from===selected)?.to||''} onChange={e=>updateEdge(e.target.value)}><option value="">Choose next…</option>{flow.nodes.filter(n=>n.id!==selected).map(n=><option key={n.id} value={n.id}>{n.name}</option>)}</select></label><div className="vars"><b>Runtime variables</b>{Object.entries(vars).map(([k,v])=><div key={k}><code>{'{{'+k+'}}'}</code><span>{typeof v==='string'?v:JSON.stringify(v)}</span></div>)}</div></>}</aside></div><div className="flow-bottom"><div><b>Execution log</b>{log.length?log.map((x,i)=><div className="flow-log" key={i}><CheckCircle2 size={12}/>{x}</div>):<span className="muted-log">Run the flow to see real execution results.</span>}</div><div className="flow-footer"><span>{flow.nodes.length} blocks</span><span>{flow.edges.length} connections</span><span>{CONNECTORS.length} connectors</span></div></div></section>}
+  setRunning(true);
+  setLog([]);
+
+  let data: any = null;
+  let local = { ...vars };
+  let current: Node | undefined = flow.nodes[0];
+  const visited = new Set<string>();
+
+  try {
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+
+      sync({
+        ...flow,
+        nodes: flow.nodes.map((n) =>
+          n.id === current!.id ? { ...n, status: 'running' } : n
+        ),
+      });
+
+      let value: any = data;
+
+      if (current.kind === 'http') {
+        const url = resolve(current.path, local);
+
+        const response = await fetch('/proxy', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url,
+            method: current.method,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body:
+              current.method === 'GET'
+                ? undefined
+                : resolve(current.body || '', local),
+          }),
+        });
+
+        const responseData = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            responseData.error || `HTTP ${response.status}`
+          );
+        }
+
+        value = responseData.body
+          ? (() => {
+              try {
+                return JSON.parse(responseData.body);
+              } catch {
+                return responseData.body;
+              }
+            })()
+          : responseData;
+
+        local.status = responseData.status;
+        local.response = value;
+      } else if (current.kind === 'condition') {
+        const ok = current.condition
+          ? Function(
+              'v',
+              'with(v){return ' +
+                resolve(current.condition, local) +
+                '}'
+            )(local)
+          : true;
+
+        if (!ok) {
+          setLog((x) => [
+            ...x,
+            `Condition failed: ${current.condition}`,
+          ]);
+          break;
+        }
+
+        value = local;
+      } else if (current.kind === 'transform') {
+        value = resolve(current.expression || 'value', local);
+        local.value = value;
+      } else if (current.kind === 'delay') {
+        await new Promise((r) =>
+          setTimeout(r, Math.min(current?.delay || 1000, 10000))
+        );
+
+        value = local;
+      } else if (current.kind === 'script') {
+        value = local;
+      } else if (current.kind === 'connector') {
+        value = {
+          connector: current.connector,
+          operation: current.operation,
+          status: 'ready',
+        };
+
+        local.connectorResult = value;
+      } else {
+        value = local;
+      }
+
+      if (current.capture) {
+        local[current.capture] =
+          typeof value === 'string'
+            ? value
+            : JSON.stringify(value);
+      }
+
+      setVars({ ...local });
+
+      sync({
+        ...flow,
+        nodes: flow.nodes.map((n) =>
+          n.id === current!.id
+            ? {
+                ...n,
+                status: 'success',
+                value,
+              }
+            : n
+        ),
+      });
+
+      setLog((x) => [
+        ...x,
+        `${current.kind.toUpperCase()} • ${current.name} • success${
+          current.capture
+            ? ` • {{${current.capture}}} captured`
+            : ''
+        }`,
+      ]);
+
+      const next = flow.edges.find(
+        (e) =>
+          e.from === current!.id &&
+          !visited.has(e.to)
+      );
+
+      current = flow.nodes.find(
+        (n) => n.id === next?.to
+      );
+    }
+  } catch (e) {
+    const msg = String(
+      (e as Error).message || e
+    );
+
+    sync({
+      ...flow,
+      nodes: flow.nodes.map((n) =>
+        n.id === current?.id
+          ? {
+              ...n,
+              status: 'error',
+              value: msg,
+            }
+          : n
+      ),
+    });
+
+    setLog((x) => [
+      ...x,
+      `ERROR • ${msg}`,
+    ]);
+  } finally {
+    setRunning(false);
+  }
+};
