@@ -1,16 +1,17 @@
 import { randomUUID } from 'node:crypto';
+import { assertSafeHttpUrl, safeTimeout } from './security.js';
 const monitors = new Map();
 const workspaces = new Map();
 function resolve(value, environment = {}) { return String(value ?? '').replace(/\{\{([^}]+)\}\}/g, (_, key) => environment[key.trim()] ?? `{{${key}}}`); }
 export async function checkEndpoint({ url, method = 'GET', headers = {}, body, environment = {}, timeout = 15000 }) {
-  const target = resolve(url, environment), started = Date.now();
+  const target = await assertSafeHttpUrl(resolve(url, environment)), started = Date.now();
   try {
-    const response = await fetch(target, { method, headers, body: ['GET','HEAD'].includes(method.toUpperCase()) ? undefined : body, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
+    const response = await fetch(target, { method, headers, body: ['GET','HEAD'].includes(method.toUpperCase()) ? undefined : body, redirect: 'follow', signal: AbortSignal.timeout(safeTimeout(timeout)) });
     const text = await response.text();
     return { ok: response.ok, status: response.status, statusText: response.statusText, time: Date.now() - started, bodyPreview: text.slice(0, 1000) };
   } catch (error) { return { ok: false, status: 0, time: Date.now() - started, error: error?.message || 'Request failed' }; }
 }
-export function createMonitor(input) { const id = input.id || randomUUID(); const monitor = { id, name: input.name || 'API Monitor', url: input.url, method: input.method || 'GET', headers: input.headers || {}, body: input.body, environment: input.environment || {}, intervalSeconds: Math.max(10, Number(input.intervalSeconds || 60)), createdAt: new Date().toISOString(), lastRun: null }; monitors.set(id, monitor); return monitor; }
+export function createMonitor(input) { const id = input.id || randomUUID(); if (!input.url) throw new Error('Monitor URL is required'); const monitor = { id, name: input.name || 'API Monitor', url: input.url, method: input.method || 'GET', headers: input.headers || {}, body: input.body, environment: input.environment || {}, intervalSeconds: Math.max(10, Number(input.intervalSeconds || 60)), createdAt: new Date().toISOString(), lastRun: null }; monitors.set(id, monitor); return monitor; }
 export async function runMonitor(id) { const monitor = monitors.get(id); if (!monitor) throw new Error('Monitor not found'); const result = await checkEndpoint(monitor); monitor.lastRun = { at: new Date().toISOString(), ...result }; monitors.set(id, monitor); return { monitor, result }; }
 export function listMonitors() { return [...monitors.values()]; }
 export function createWorkspace(input) { const id = input.id || randomUUID(); const workspace = { id, name: input.name || 'My Workspace', description: input.description || '', createdAt: new Date().toISOString() }; workspaces.set(id, workspace); return workspace; }
