@@ -4,12 +4,13 @@ import {fileURLToPath} from 'node:url';
 import {runAssertions,runFlowScript} from './script-runner.js';
 import {createMock,getMock} from './mock-store.js';
 import {normalizeCollection,importOpenApi,getCodegenLanguages,generateCode,runCollection} from './postman-platform.js';
+import {importRaml,importGraphql,importCurl,importWsdl,parseSpec,exportCollection,importHar,collectionToHar,validateCollection,makeWorkspaceExport} from './advanced-platform.js';
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const app=express();
-app.use(express.json({limit:'10mb'}));
+app.use(express.json({limit:'25mb'}));
 
-app.get('/health',(req,res)=>res.json({ok:true,name:'postman-pro',version:'0.2.0',engine:'postman-compatible'}));
+app.get('/health',(req,res)=>res.json({ok:true,name:'postman-pro',version:'0.3.0',engine:'postman-compatible',capabilities:['REST','OpenAPI','Swagger','RAML','GraphQL','WSDL','HAR','cURL','codegen','collection-runner','mocks','scripts','MCP']}));
 
 app.post('/proxy',async(req,res)=>{try{const {url,method='GET',headers={},body}=req.body||{};if(!url)return res.status(400).json({error:'URL is required'});const started=Date.now();const response=await fetch(url,{method,headers,body:['GET','HEAD'].includes(method)?undefined:body,redirect:'follow',signal:AbortSignal.timeout(30000)});const text=await response.text();const outHeaders={};response.headers.forEach((v,k)=>outHeaders[k]=v);res.json({status:response.status,statusText:response.statusText,headers:outHeaders,body:text,time:Date.now()-started});}catch(e){res.status(502).json({error:e?.message||'Proxy request failed'})}});
 
@@ -21,10 +22,19 @@ app.post('/script',async(req,res)=>{try{const {script,vars}=req.body||{};res.jso
 app.post('/mock',async(req,res)=>{const {id='default',status=200,headers={},body=''}=req.body||{};createMock(id,{status,headers,body});res.json({id,url:'/mock/'+encodeURIComponent(id)})});
 app.get('/mock/:id',async(req,res)=>{const m=getMock(req.params.id);if(!m)return res.status(404).json({error:'Mock not found'});res.status(m.status).set(m.headers).send(m.body)});
 
-// Postman-compatible platform services. These wrap official open-source Postman projects instead of reimplementing their formats.
 app.get('/api/platform/codegen/languages',(req,res)=>{try{res.json({languages:getCodegenLanguages()})}catch(e){res.status(500).json({error:e?.message||'Unable to list code generators'})}});
 app.post('/api/platform/collection/normalize',(req,res)=>{try{res.json({collection:normalizeCollection(req.body?.collection)})}catch(e){res.status(400).json({error:e?.message||'Invalid collection'})}});
 app.post('/api/platform/openapi/import',async(req,res)=>{try{const {spec,options={}}=req.body||{};if(!spec)return res.status(400).json({error:'OpenAPI JSON/YAML is required'});res.json({collection:await importOpenApi(spec,options)})}catch(e){res.status(400).json({error:e?.message||'OpenAPI import failed'})}});
+app.post('/api/platform/raml/import',async(req,res)=>{try{const {spec,options={}}=req.body||{};res.json({collection:await importRaml(spec,options)})}catch(e){res.status(400).json({error:e?.message||'RAML import failed'})}});
+app.post('/api/platform/graphql/import',async(req,res)=>{try{const {spec,options={}}=req.body||{};res.json({collection:await importGraphql(spec,options)})}catch(e){res.status(400).json({error:e?.message||'GraphQL import failed'})}});
+app.post('/api/platform/curl/import',async(req,res)=>{try{res.json({collection:await importCurl(req.body?.curl)})}catch(e){res.status(400).json({error:e?.message||'cURL import failed'})}});
+app.post('/api/platform/wsdl/import',async(req,res)=>{try{res.json({collection:await importWsdl(req.body?.spec,req.body?.options||{})})}catch(e){res.status(400).json({error:e?.message||'WSDL import failed'})}});
+app.post('/api/platform/spec/detect',(req,res)=>{const text=String(req.body?.spec||'');const parsed=parseSpec(text);res.json({format:text.trimStart().startsWith('{')?'json':text.includes('#%RAML')?'raml':parsed?'yaml-or-json':'unknown',parsed:parsed||null})});
+app.post('/api/platform/har/import',(req,res)=>{try{res.json({collection:importHar(req.body?.har)})}catch(e){res.status(400).json({error:e?.message||'HAR import failed'})}});
+app.post('/api/platform/har/export',(req,res)=>{try{res.json(collectionToHar(req.body?.collection))}catch(e){res.status(400).json({error:e?.message||'HAR export failed'})}});
+app.post('/api/platform/collection/export',(req,res)=>{try{res.type('application/json').send(exportCollection(req.body?.collection))}catch(e){res.status(400).json({error:e?.message||'Collection export failed'})}});
+app.post('/api/platform/collection/validate',(req,res)=>res.json(validateCollection(req.body?.collection)));
+app.post('/api/platform/workspace/export',(req,res)=>res.json(makeWorkspaceExport(req.body||{})));
 app.post('/api/platform/codegen',async(req,res)=>{try{const {request,language='javascript',variant='fetch',options={}}=req.body||{};res.json({language,variant,code:await generateCode(request,language,variant,options)})}catch(e){res.status(400).json({error:e?.message||'Code generation failed'})}});
 app.post('/api/platform/runner',async(req,res)=>{try{const {collection,environment,iterationData,iterationCount,timeout,delayRequest}=req.body||{};if(!collection)return res.status(400).json({error:'Collection is required'});res.json(await runCollection(collection,{environment,iterationData,iterationCount,timeout,delayRequest}))}catch(e){res.status(400).json({error:e?.message||'Collection run failed'})}});
 
