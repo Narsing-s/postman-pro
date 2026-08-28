@@ -8,7 +8,7 @@ import AutomationCenter from './AutomationCenter';
 import DeveloperCenter from './DeveloperCenter';
 import PlatformProCenter from './PlatformProCenter';
 import {migrateWorkspace} from './storage';
-import './styles.css';import './FlowBuilder.css';import './product.css';import './ImportCenter.css';import './DeveloperCenter.css';import './PlatformCenter.css';
+import './styles.css';import './FlowBuilder.css';import './product.css';import './ImportCenter.css';import './DeveloperCenter.css';import './PlatformCenter.css';import './PlatformProCenter.css';
 
 migrateWorkspace();
 
