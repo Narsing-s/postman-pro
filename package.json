@@ -1,7 +1,7 @@
 {
   "name": "postman-pro",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"vite\" \"node server/index.js\"",
@@ -19,11 +19,12 @@
     "concurrently": "latest",
     "express": "4.21.2",
     "js-yaml": "latest",
-    "newman": "^6.2.1",
+    "newman": "^6.2.2",
     "openapi-to-postmanv2": "^6.3.2",
     "postman-code-generators": "latest",
     "postman-collection": "latest",
     "postman-runtime": "latest",
+    "postman-sandbox": "latest",
     "raml1-to-postman": "^1.0.0",
     "graphql-to-postman": "^1.0.0",
     "curl-to-postmanv2": "^1.8.7",
