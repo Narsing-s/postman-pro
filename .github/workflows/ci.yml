@@ -10,21 +10,14 @@ permissions:
   contents: read
 
 jobs:
-  quality:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Type check
-        run: npm run lint
-      - name: Production build
-        run: npm run build
-      - name: Test suite
-        run: npm test
+      - run: npm install
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
