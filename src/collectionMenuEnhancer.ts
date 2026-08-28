@@ -96,6 +96,8 @@ function icon(label: string) {
     Duplicate: '▣',
     Sort: '↕',
     Delete: '♲',
+    'A–Z': 'A',
+    'Z–A': 'Z',
     'Create mock server': '▣',
     'Create monitor': '◉',
     'Create flow': '⌁',
@@ -137,7 +139,6 @@ function enhanceMenu(menu: HTMLElement) {
 
   const original = Array.from(menu.querySelectorAll(':scope > button')) as HTMLButtonElement[];
   const findOriginal = (text: string) => original.find(b => (b.textContent || '').includes(text));
-
   const trigger = (text: string, fallback?: () => void) => {
     const button = findOriginal(text);
     if (button) button.click();
@@ -148,6 +149,12 @@ function enhanceMenu(menu: HTMLElement) {
   const collectionName = collectionBlock?.querySelector('.collection-name')?.textContent?.trim() || 'collection';
 
   menu.innerHTML = '';
+
+  // Keep React's original action buttons mounted so their existing handlers continue to work.
+  const proxies = document.createElement('div');
+  proxies.className = 'context-action-proxies';
+  original.forEach(button => proxies.appendChild(button));
+  menu.appendChild(proxies);
 
   menu.appendChild(makeButton('Add request', () => trigger('Add request')));
   menu.appendChild(makeButton('Add folder', () => trigger('Add folder')));
