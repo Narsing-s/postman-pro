@@ -1,1 +1,24 @@
-{"name":"postman-pro","private":true,"version":"0.1.0","type":"module","scripts":{"dev":"concurrently \"vite\" \"node server/index.js\"","build":"vite build","start":"node server/index.js"},"dependencies":{"@vitejs/plugin-react":"latest","concurrently":"latest","express":"4.21.2","react":"latest","react-dom":"latest","vite":"latest","typescript":"latest","lucide-react":"latest"},"devDependencies":{}}
+{
+  "name": "postman-pro",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"node server/index.js\"",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "lint": "tsc --noEmit",
+    "test": "npm run build"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "express": "4.21.2",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "latest",
+    "typescript": "latest",
+    "lucide-react": "latest"
+  },
+  "devDependencies": {}
+}
