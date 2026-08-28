@@ -1,3 +1,5 @@
+import './collectionMenuEnhancer.css';
+
 const COLLECTIONS_KEY = 'postman-pro.collections';
 const REQUESTS_KEY = 'postman-pro.requests';
 
