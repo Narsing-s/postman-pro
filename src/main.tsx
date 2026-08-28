@@ -1,4 +1,5 @@
 import React,{useEffect,useState} from 'react';
+import {createRoot} from 'react-dom/client';
 import {Upload} from 'lucide-react';
 import App from './App';import FlowBuilder from './flow';import ImportCenter from './ImportCenter';import AutomationCenter from './AutomationCenter';
 import {migrateWorkspace} from './storage';
