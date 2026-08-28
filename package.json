@@ -1,7 +1,7 @@
 {
   "name": "postman-pro",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"vite\" \"node server/index.js\"",
@@ -15,6 +15,10 @@
     "concurrently": "latest",
     "express": "4.21.2",
     "js-yaml": "latest",
+    "newman": "^6.2.1",
+    "openapi-to-postmanv2": "^6.3.2",
+    "postman-code-generators": "latest",
+    "postman-collection": "latest",
     "react": "latest",
     "react-dom": "latest",
     "vite": "latest",
