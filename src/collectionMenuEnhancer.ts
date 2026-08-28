@@ -35,17 +35,24 @@ function exportCollection(menu: HTMLElement) {
   const requests = readJson<any[]>(REQUESTS_KEY, []);
   const collection = collections.find(c => c.name === name);
   if (!collection) return notify('Collection data not found');
-  const items = requests.filter(r => collection.requestIds?.includes(r.id)).map(r => ({
-    name: r.name,
-    request: {
-      method: r.method,
-      url: r.url,
-      header: r.headers || [],
-      body: r.bodyType === 'none' ? undefined : { mode: r.bodyType, raw: r.body }
-    }
-  }));
+
+  const items = requests
+    .filter(r => collection.requestIds?.includes(r.id))
+    .map(r => ({
+      name: r.name,
+      request: {
+        method: r.method,
+        url: r.url,
+        header: r.headers || [],
+        body: r.bodyType === 'none' ? undefined : { mode: r.bodyType, raw: r.body }
+      }
+    }));
+
   const data = {
-    info: { name: collection.name, schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+    info: {
+      name: collection.name,
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
     item: items
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -64,13 +71,51 @@ function runSort(menu: HTMLElement, direction: 'az' | 'za') {
   const requests = readJson<any[]>(REQUESTS_KEY, []);
   const collection = collections.find(x => x.name === name);
   if (!collection) return;
+
   const sorted = requests
     .filter(r => collection.requestIds?.includes(r.id))
     .sort((a, b) => a.name.localeCompare(b.name) * (direction === 'az' ? 1 : -1));
+
   collection.requestIds = sorted.map(r => r.id);
   localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
   notify(direction === 'az' ? 'Requests sorted A–Z' : 'Requests sorted Z–A');
   window.location.reload();
+}
+
+function icon(label: string) {
+  const value: Record<string, string> = {
+    'Add request': '+',
+    'Add folder': '□',
+    Run: '▶',
+    Share: '↗',
+    'Copy link': '⧉',
+    'Ask AI': '✦',
+    Move: '→',
+    Fork: '⑂',
+    Rename: '✎',
+    Duplicate: '▣',
+    Sort: '↕',
+    Delete: '♲',
+    'Create mock server': '▣',
+    'Create monitor': '◉',
+    'Create flow': '⌁',
+    'Generate tests': '✓',
+    'Generate specification': '≡',
+    'Export collection': '⇩'
+  };
+  return `<span class="context-icon">${value[label] || '•'}</span>`;
+}
+
+function makeButton(label: string, handler?: () => void, danger = false) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  if (danger) button.className = 'danger';
+  button.innerHTML = `${icon(label)}<span>${label}</span>`;
+  if (handler) button.addEventListener('click', e => {
+    e.stopPropagation();
+    handler();
+  });
+  return button;
 }
 
 function makeSubmenu(items: readonly string[][], className: string) {
@@ -79,7 +124,7 @@ function makeSubmenu(items: readonly string[][], className: string) {
   items.forEach(([label, action]) => {
     const item = document.createElement('button');
     item.type = 'button';
-    item.innerHTML = `<span>${label}</span>`;
+    item.innerHTML = `${icon(label)}<span>${label}</span>`;
     item.dataset.action = action;
     submenu.appendChild(item);
   });
@@ -90,39 +135,78 @@ function enhanceMenu(menu: HTMLElement) {
   if (menu.dataset.enhanced === 'true') return;
   menu.dataset.enhanced = 'true';
 
-  const sort = Array.from(menu.querySelectorAll('button')).find(b => b.textContent?.includes('Sort A–Z')) as HTMLButtonElement | undefined;
-  if (sort) {
-    const wrap = document.createElement('div');
-    wrap.className = 'context-submenu-wrap';
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'submenu-trigger';
-    button.innerHTML = '<span>Sort</span><span class="submenu-arrow">›</span>';
-    button.addEventListener('click', e => e.stopPropagation());
-    wrap.appendChild(button);
-    const submenu = makeSubmenu([['A–Z', 'az'], ['Z–A', 'za']], 'sort-submenu');
-    submenu.querySelector('[data-action="az"]')?.addEventListener('click', e => { e.stopPropagation(); runSort(menu, 'az'); });
-    submenu.querySelector('[data-action="za"]')?.addEventListener('click', e => { e.stopPropagation(); runSort(menu, 'za'); });
-    wrap.appendChild(submenu);
-    sort.replaceWith(wrap);
-  }
+  const original = Array.from(menu.querySelectorAll(':scope > button')) as HTMLButtonElement[];
+  const findOriginal = (text: string) => original.find(b => (b.textContent || '').includes(text));
+
+  const trigger = (text: string, fallback?: () => void) => {
+    const button = findOriginal(text);
+    if (button) button.click();
+    else fallback?.();
+  };
+
+  const collectionBlock = menu.closest('.collection-block');
+  const collectionName = collectionBlock?.querySelector('.collection-name')?.textContent?.trim() || 'collection';
+
+  menu.innerHTML = '';
+
+  menu.appendChild(makeButton('Add request', () => trigger('Add request')));
+  menu.appendChild(makeButton('Add folder', () => trigger('Add folder')));
+
+  const divider1 = document.createElement('div');
+  divider1.className = 'context-divider';
+  menu.appendChild(divider1);
+
+  menu.appendChild(makeButton('Run', () => notify(`Run ${collectionName}`)));
+  menu.appendChild(makeButton('Share', () => notify('Share collection selected')));
+  menu.appendChild(makeButton('Copy link', () => {
+    navigator.clipboard?.writeText(collectionName).catch(() => undefined);
+    notify('Collection link copied');
+  }));
+  menu.appendChild(makeButton('Ask AI', () => notify('Ask AI selected')));
+  menu.appendChild(makeButton('Move', () => notify('Move collection selected')));
+  menu.appendChild(makeButton('Fork', () => notify('Fork collection selected')));
+  menu.appendChild(makeButton('Rename', () => trigger('Rename')));
+  menu.appendChild(makeButton('Duplicate', () => notify('Duplicate collection selected')));
+
+  const sortWrap = document.createElement('div');
+  sortWrap.className = 'context-submenu-wrap';
+  const sortButton = makeButton('Sort');
+  sortButton.classList.add('submenu-trigger');
+  sortButton.innerHTML += '<span class="submenu-arrow">›</span>';
+  sortWrap.appendChild(sortButton);
+  const sortSubmenu = makeSubmenu([['A–Z', 'az'], ['Z–A', 'za']], 'sort-submenu');
+  sortSubmenu.querySelector('[data-action="az"]')?.addEventListener('click', e => {
+    e.stopPropagation();
+    runSort(menu, 'az');
+  });
+  sortSubmenu.querySelector('[data-action="za"]')?.addEventListener('click', e => {
+    e.stopPropagation();
+    runSort(menu, 'za');
+  });
+  sortWrap.appendChild(sortSubmenu);
+  menu.appendChild(sortWrap);
+
+  menu.appendChild(makeButton('Delete', () => trigger('Delete collection'), true));
+
+  const divider2 = document.createElement('div');
+  divider2.className = 'context-divider';
+  menu.appendChild(divider2);
 
   const moreWrap = document.createElement('div');
   moreWrap.className = 'context-submenu-wrap more-wrap';
-  const moreButton = document.createElement('button');
-  moreButton.type = 'button';
-  moreButton.className = 'submenu-trigger';
-  moreButton.innerHTML = '<span>More</span><span class="submenu-arrow">›</span>';
-  moreButton.addEventListener('click', e => e.stopPropagation());
+  const moreButton = makeButton('More');
+  moreButton.classList.add('submenu-trigger');
+  moreButton.innerHTML += '<span class="submenu-arrow">›</span>';
   moreWrap.appendChild(moreButton);
-  const submenu = makeSubmenu(moreItems, 'more-submenu');
-  submenu.querySelectorAll('button').forEach(button => button.addEventListener('click', e => {
+
+  const moreSubmenu = makeSubmenu(moreItems, 'more-submenu');
+  moreSubmenu.querySelectorAll('button').forEach(button => button.addEventListener('click', e => {
     e.stopPropagation();
     const action = (button as HTMLElement).dataset.action;
     if (action === 'export') return exportCollection(menu);
     notify(`${button.textContent || ''} selected`);
   }));
-  moreWrap.appendChild(submenu);
+  moreWrap.appendChild(moreSubmenu);
   menu.appendChild(moreWrap);
 }
 
