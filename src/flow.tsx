@@ -5,13 +5,13 @@ type Kind='http'|'connector'|'condition'|'transform'|'delay'|'script'|'display';
 type Node={id:string;name:string;kind:Kind;method:string;path:string;connector?:string;operation?:string;body?:string;condition?:string;expression?:string;delay?:number;script?:string;capture?:string;status?:'idle'|'running'|'success'|'error';value?:unknown};
 type Edge={from:string;to:string};
 type Flow={id:string;name:string;nodes:Node[];edges:Edge[]};
-
 const CONNECTORS=['Salesforce','GitHub','Notion','Figma','Calendly','ClickUp','Box'];
 const BLOCKS:[string,Kind][]=[['HTTP Request','http'],['Connector','connector'],['Condition','condition'],['Transform','transform'],['Delay','delay'],['Script','script'],['Display','display']];
 const FLOW_KEY='postman_pro_flows';
 const blank=():Flow=>({id:crypto.randomUUID(),name:'New Flow',nodes:[],edges:[]});
 const read=():Flow[]=>{try{return JSON.parse(localStorage.getItem(FLOW_KEY)||'[]')}catch{return []}};
 const resolve=(s:string,v:Record<string,unknown>)=>s.replace(/\{\{([^}]+)\}\}/g,(_,k)=>String(v[k.trim()]??`{{${k}}}`));
+async function safeJson<T=any>(response:Response):Promise<T>{const text=await response.text();let data:any;try{data=text?JSON.parse(text):null}catch{data=text}if(!response.ok){const message=typeof data==='object'&&data?(data.error||data.message):String(data||response.statusText||`HTTP ${response.status}`);throw new Error(message)}return data as T}
 
 export default function FlowBuilder(){
  const [flows,setFlows]=useState<Flow[]>(read),[flow,setFlow]=useState<Flow>(()=>read()[0]||blank()),[selected,setSelected]=useState(''),[running,setRunning]=useState(false),[palette,setPalette]=useState(false),[connectorMenu,setConnectorMenu]=useState(false),[vars,setVars]=useState<Record<string,unknown>>({}),[log,setLog]=useState<string[]>([]);
@@ -25,11 +25,11 @@ export default function FlowBuilder(){
  const createFlow=()=>{const f=blank();setFlows(x=>[...x,f]);setFlow(f);setSelected('');setLog([])};
  const saveFlow=()=>{localStorage.setItem(FLOW_KEY,JSON.stringify(flows));setLog(x=>['Flow saved',...x].slice(0,20))};
  const execute=async()=>{if(!flow.nodes.length||running)return;setRunning(true);setLog([]);let local={...vars};let current:Node|undefined=flow.nodes[0];const visited=new Set<string>();try{while(current&&!visited.has(current.id)){visited.add(current.id);sync({...flow,nodes:flow.nodes.map(n=>n.id===current!.id?{...n,status:'running'}:n)});let value:unknown=local;
-   if(current.kind==='http'){const url=resolve(current.path,local);const r=await fetch('/proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,method:current.method,headers:{'Content-Type':'application/json'},body:current.method==='GET'?undefined:resolve(current.body||'',local)})});const d=await r.json();if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);try{value=JSON.parse(d.body)}catch{value=d.body||d}local.status=d.status;local.response=value;}
+   if(current.kind==='http'){const url=resolve(current.path,local);const r=await fetch('/proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,method:current.method,headers:{'Content-Type':'application/json'},body:current.method==='GET'?undefined:resolve(current.body||'',local)})});const d=await safeJson<any>(r);try{value=JSON.parse(d.body)}catch{value=d.body??d}local.status=d.status;local.response=value;}
    else if(current.kind==='condition'){const condition=resolve(current.condition||'true',local);const ok=Function('v',`with(v){return (${condition})}`)(local);if(!ok){setLog(x=>[...x,`Condition stopped flow: ${current.condition}`]);break}value=local;}
    else if(current.kind==='transform'){value=resolve(current.expression||'value',local);local.value=value;}
    else if(current.kind==='delay'){await new Promise(r=>setTimeout(r,Math.min(Math.max(current.delay||1000,0),30000)));value=local;}
-   else if(current.kind==='script'){if(current.script?.trim()){value=await fetch('/script',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({script:current.script,vars:local})}).then(r=>r.json());local.scriptResult=value}else value=local;}
+   else if(current.kind==='script'){if(current.script?.trim()){const response=await fetch('/script',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({script:current.script,vars:local})});value=await safeJson(response);local.scriptResult=value}else value=local;}
    else if(current.kind==='connector'){value={connector:current.connector,operation:current.operation,status:'ready'};local.connectorResult=value;}
    else value=local;
    if(current.capture)local[current.capture]=typeof value==='string'?value:JSON.stringify(value);setVars({...local});sync({...flow,nodes:flow.nodes.map(n=>n.id===current!.id?{...n,status:'success',value}:n)});setLog(x=>[...x,`${current!.kind.toUpperCase()} • ${current!.name} • success${current!.capture?` • {{${current!.capture}}} captured`:''}`]);const next=flow.edges.find(e=>e.from===current!.id&&!visited.has(e.to));current=flow.nodes.find(n=>n.id===next?.to);
