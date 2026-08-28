@@ -12,8 +12,10 @@
     "test": "npm run build"
   },
   "dependencies": {
+    "@modelcontextprotocol/express": "latest",
+    "@modelcontextprotocol/node": "latest",
+    "@modelcontextprotocol/server": "latest",
     "@vitejs/plugin-react": "latest",
-    "@modelcontextprotocol/sdk": "latest",
     "concurrently": "latest",
     "express": "4.21.2",
     "js-yaml": "latest",
@@ -23,9 +25,9 @@
     "postman-collection": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "vite": "latest",
     "typescript": "latest",
-    "lucide-react": "latest"
+    "lucide-react": "latest",
+    "zod": "latest"
   },
   "devDependencies": {}
 }
